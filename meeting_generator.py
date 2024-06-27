@@ -7,11 +7,11 @@ def generate_meeting(date, client, is_night=False):
     if is_night:
         meeting_type = "Security"
         start_hour = random.randint(21, 23)
-        duration = random.randint(2, 8)  # Night shifts are longer
+        duration = random.randint(4, 8)  # Increased duration for night shifts
     else:
         meeting_type = random.choice([type for type in APPOINTMENT_TYPES if type != "Security"])
-        start_hour = random.randint(8, 19)
-        duration = random.randint(1, 3)
+        start_hour = random.randint(8, 17)
+        duration = random.randint(2, 6)  # Increased duration for day meetings
 
     start_time = datetime.datetime.combine(date, datetime.time(hour=start_hour))
     end_time = start_time + datetime.timedelta(hours=duration)
@@ -35,10 +35,12 @@ def generate_meetings(start_date, num_clients=5, days=7):
         night_shift_assigned = False
 
         # Generate day meetings
-        while len(daily_meetings) < 15:  # Limit day meetings
+        total_day_hours = 0
+        while total_day_hours < 35:  # Aim for about 35 hours of day meetings
             client = random.randint(1, num_clients)
             meeting = generate_meeting(current_date, client, is_night=False)
             daily_meetings.append(meeting)
+            total_day_hours += (meeting.end - meeting.start).total_seconds() / 3600
 
         # Generate one night shift
         night_shift = generate_meeting(current_date, random.randint(1, num_clients), is_night=True)

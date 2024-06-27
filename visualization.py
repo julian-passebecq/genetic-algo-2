@@ -2,6 +2,13 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import datetime
+
+def plot_fitness_history(fitness_history):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(y=fitness_history, mode='lines', name='Best Fitness'))
+    fig.update_layout(title='Fitness History', xaxis_title='Generation', yaxis_title='Fitness Score')
+    return fig
 
 def create_schedule_dataframe(schedule):
     data = []
@@ -21,7 +28,7 @@ def create_schedule_dataframe(schedule):
 
 def plot_schedule(schedule_df):
     fig = px.timeline(schedule_df, x_start="Start", x_end="End", y="Agent", color="Type",
-                      hover_data=["Is Night"],
+                      hover_data=["Is Night", "Duration"],
                       title="Security Company Schedule")
     fig.update_yaxes(categoryorder="category ascending")
     
@@ -53,8 +60,11 @@ def plot_schedule(schedule_df):
     return fig
 
 def plot_schedule_statistics(schedule_df):
-    # Create a subplot with 1 row and 3 columns
-    fig = make_subplots(rows=1, cols=3, subplot_titles=("Meetings per Agent", "Night Shifts per Agent", "Average Working Hours per Agent"))
+    # Create a subplot with 2 rows and 2 columns
+    fig = make_subplots(rows=2, cols=2, subplot_titles=(
+        "Meetings per Agent", "Night Shifts per Agent", 
+        "Average Working Hours per Agent", "Daily Working Hours per Agent"
+    ))
 
     # Meetings per agent
     meetings_per_agent = schedule_df['Agent'].value_counts().reset_index()
@@ -67,12 +77,15 @@ def plot_schedule_statistics(schedule_df):
     fig.add_trace(go.Bar(x=night_shifts['Agent'], y=night_shifts['Number of Night Shifts'], name='Night Shifts'), row=1, col=2)
 
     # Average working hours per agent
-    schedule_df['Duration'] = (schedule_df['End'] - schedule_df['Start']).dt.total_seconds() / 3600
     avg_hours = schedule_df.groupby('Agent')['Duration'].mean().reset_index()
     avg_hours.columns = ['Agent', 'Average Working Hours']
-    fig.add_trace(go.Bar(x=avg_hours['Agent'], y=avg_hours['Average Working Hours'], name='Working Hours'), row=1, col=3)
+    fig.add_trace(go.Bar(x=avg_hours['Agent'], y=avg_hours['Average Working Hours'], name='Working Hours'), row=2, col=1)
 
-    fig.update_layout(height=400, width=1200, title_text="Schedule Statistics")
+    # Daily working hours per agent
+    daily_hours = schedule_df.groupby(['Agent', pd.to_datetime(schedule_df['Start']).dt.date])['Duration'].sum().reset_index()
+    fig.add_trace(go.Box(x=daily_hours['Agent'], y=daily_hours['Duration'], name='Daily Hours'), row=2, col=2)
+
+    fig.update_layout(height=800, width=1200, title_text="Schedule Statistics")
     return fig
 
 def analyze_schedule(schedule_df):
@@ -94,6 +107,12 @@ def analyze_schedule(schedule_df):
     print(avg_hours)
     print()
 
+    # Daily working hours per agent
+    daily_hours = schedule_df.groupby(['Agent', pd.to_datetime(schedule_df['Start']).dt.date])['Duration'].sum()
+    print("Daily working hours per agent:")
+    print(daily_hours)
+    print()
+
     # Meeting statistics
     total_meetings = len(schedule_df)
     filled_meetings = schedule_df['Agent'].notna().sum()
@@ -107,3 +126,9 @@ def analyze_schedule(schedule_df):
     # Average workload per agent
     avg_workload = meetings_per_agent.mean()
     print(f"Average workload (meetings per agent): {avg_workload:.2f}")
+
+def plot_fitness_history(fitness_history):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(y=fitness_history, mode='lines', name='Best Fitness'))
+    fig.update_layout(title='Fitness History', xaxis_title='Generation', yaxis_title='Fitness Score')
+    return fig

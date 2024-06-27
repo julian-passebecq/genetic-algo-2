@@ -13,37 +13,59 @@ def initialize_population(pop_size: int, agents: List[Agent], meetings: List[Mee
         population.append(schedule)
     return population
 
-
 def fitness(schedule: Dict[Meeting, Agent], agents: List[Agent]) -> float:
     score = 0
     agent_schedules = {agent: {} for agent in agents}
 
     for meeting, agent in schedule.items():
         if meeting.required_skill not in agent.skills and meeting.required_skill != 'Monitoring':
-            score -= 100
+            score -= 100  # Heavily penalize skill mismatches
 
         date = meeting.start.date()
         if date not in agent_schedules[agent]:
             agent_schedules[agent][date] = []
         agent_schedules[agent][date].append(meeting)
 
-        # Check for overlapping meetings
-        for other_meeting in agent_schedules[agent][date]:
-            if meeting != other_meeting and (meeting.start < other_meeting.end and meeting.end > other_meeting.start):
-                score -= 50
+    total_hours = {agent: 0 for agent in agents}
+    night_shifts = {agent: 0 for agent in agents}
 
     for agent, dates in agent_schedules.items():
         for date, meetings in dates.items():
-            work_hours = sum((meeting.end - meeting.start).seconds / 3600 for meeting in meetings)
-            if work_hours > 8:
-                score -= (work_hours - 8) * 10
+            day_hours = sum((meeting.end - meeting.start).total_seconds() / 3600 for meeting in meetings)
+            total_hours[agent] += day_hours
+            
+            if 6 <= day_hours <= 9:
+                score += 50  # Reward for ideal working hours
+            elif day_hours < 6:
+                score -= (6 - day_hours) * 20  # Penalize underutilization
+            else:
+                score -= (day_hours - 9) * 30  # Heavily penalize overwork
+            
+            night_meetings = [m for m in meetings if m.is_night]
+            if night_meetings:
+                night_shifts[agent] += 1
+                if len(night_meetings) > 1:
+                    score -= 200  # Heavily penalize multiple night shifts in one day
 
-            # Check for proper breaks
+            # Check for overlapping meetings
             sorted_meetings = sorted(meetings, key=lambda m: m.start)
             for i in range(len(sorted_meetings) - 1):
-                break_time = (sorted_meetings[i+1].start - sorted_meetings[i].end).seconds / 3600
+                if sorted_meetings[i].end > sorted_meetings[i+1].start:
+                    score -= 150  # Heavily penalize overlapping meetings
+
+            # Check for proper breaks
+            for i in range(len(sorted_meetings) - 1):
+                break_time = (sorted_meetings[i+1].start - sorted_meetings[i].end).total_seconds() / 3600
                 if break_time < 0.5:  # Less than 30 minutes break
-                    score -= 25
+                    score -= 50
+
+    # Penalize uneven distribution of total hours
+    avg_hours = sum(total_hours.values()) / len(agents)
+    score -= sum(abs(hours - avg_hours) * 15 for hours in total_hours.values())
+
+    # Penalize uneven distribution of night shifts
+    avg_night_shifts = sum(night_shifts.values()) / len(agents)
+    score -= sum(abs(shifts - avg_night_shifts) * 30 for shifts in night_shifts.values())
 
     return score
 
@@ -68,11 +90,14 @@ def mutate(schedule: Dict[Meeting, Agent], agents: List[Agent], mutation_rate: f
             if eligible_agents:
                 schedule[meeting] = random.choice(eligible_agents)
 
-def genetic_algorithm(agents: List[Agent], meetings: List[Meeting], pop_size: int, generations: int, mutation_rate: float) -> Dict[Meeting, Agent]:
+def genetic_algorithm(agents: List[Agent], meetings: List[Meeting], pop_size: int, generations: int, mutation_rate: float) -> Tuple[Dict[Meeting, Agent], List[float]]:
     population = initialize_population(pop_size, agents, meetings)
+    best_fitness_history = []
 
-    for _ in range(generations):
+    for gen in range(generations):
         population = sorted(population, key=lambda x: fitness(x, agents), reverse=True)
+        best_fitness_history.append(fitness(population[0], agents))
+        
         new_population = population[:2]  # Keep the two best schedules
 
         while len(new_population) < pop_size:
@@ -84,35 +109,8 @@ def genetic_algorithm(agents: List[Agent], meetings: List[Meeting], pop_size: in
 
         population = new_population
 
-    return max(population, key=lambda x: fitness(x, agents))
+    best_schedule = max(population, key=lambda x: fitness(x, agents))
+    return best_schedule, best_fitness_history
 
-def assign_night_shifts(agents: List[Agent], meetings: List[Meeting]) -> Dict[Meeting, Agent]:
-    night_meetings = [m for m in meetings if m.is_night]
-    night_agents = [a for a in agents if "Security" in a.skills]
-    
-    night_schedule = {}
-    for meeting in night_meetings:
-        available_agents = [a for a in night_agents if meeting.start.date() not in a.schedule]
-        if available_agents:
-            assigned_agent = random.choice(available_agents)
-            night_schedule[meeting] = assigned_agent
-            if meeting.start.date() not in assigned_agent.schedule:
-                assigned_agent.schedule[meeting.start.date()] = []
-            assigned_agent.schedule[meeting.start.date()].append(meeting)
-    
-    return night_schedule
-
-def run_scheduling_algorithm(agents: List[Agent], meetings: List[Meeting], pop_size: int = 50, generations: int = 100) -> Dict[Meeting, Agent]:
-    # First, assign night shifts
-    night_schedule = assign_night_shifts(agents, meetings)
-    
-    # Remove night meetings and update agent availability
-    day_meetings = [m for m in meetings if not m.is_night]
-    
-    # Run genetic algorithm for day meetings
-    day_schedule = genetic_algorithm(agents, day_meetings, pop_size=pop_size, generations=generations, mutation_rate=0.1)
-    
-    # Combine night and day schedules
-    final_schedule = {**night_schedule, **day_schedule}
-    
-    return final_schedule
+def run_scheduling_algorithm(agents: List[Agent], meetings: List[Meeting], pop_size: int = 100, generations: int = 200) -> Tuple[Dict[Meeting, Agent], List[float]]:
+    return genetic_algorithm(agents, meetings, pop_size=pop_size, generations=generations, mutation_rate=0.1)
