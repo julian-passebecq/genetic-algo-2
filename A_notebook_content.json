@@ -1,0 +1,201 @@
+{
+    "cells": [
+     {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+       "# Security Company Scheduler V6\n",
+       "\n",
+       "This notebook implements a scheduling system for a security company using genetic algorithms."
+      ]
+     },
+     {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+       "import os\n",
+       "import sys\n",
+       "sys.path.append(os.getcwd())\n",
+       "\n",
+       "import datetime\n",
+       "import pandas as pd\n",
+       "from ipywidgets import interact, interactive, fixed, interact_manual\n",
+       "import ipywidgets as widgets\n",
+       "\n",
+       "from constants import AGENTS, APPOINTMENT_TYPES\n",
+       "from models import Agent, Meeting\n",
+       "from meeting_generator import generate_meetings\n",
+       "from genetic_algorithm import run_scheduling_algorithm\n",
+       "from visualization import create_schedule_dataframe, plot_schedule, plot_schedule_statistics, analyze_schedule"
+      ]
+     },
+     {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+       "## Set Parameters"
+      ]
+     },
+     {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+       "@interact\n",
+       "def set_parameters(num_agents=widgets.IntSlider(min=1, max=10, step=1, value=5),\n",
+       "                   num_days=widgets.IntSlider(min=1, max=14, step=1, value=7),\n",
+       "                   num_clients=widgets.IntSlider(min=1, max=20, step=1, value=5),\n",
+       "                   population_size=widgets.IntSlider(min=10, max=200, step=10, value=50),\n",
+       "                   num_generations=widgets.IntSlider(min=10, max=500, step=10, value=100)):\n",
+       "    global PARAMS\n",
+       "    PARAMS = {\n",
+       "        'num_agents': num_agents,\n",
+       "        'num_days': num_days,\n",
+       "        'num_clients': num_clients,\n",
+       "        'population_size': population_size,\n",
+       "        'num_generations': num_generations\n",
+       "    }\n",
+       "    print(\"Parameters set successfully.\")"
+      ]
+     },
+     {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+       "## Generate Meetings"
+      ]
+     },
+     {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+       "def generate_and_display_meetings():\n",
+       "    start_date = datetime.date.today()\n",
+       "    global meetings\n",
+       "    meetings = generate_meetings(start_date, num_clients=PARAMS['num_clients'], days=PARAMS['num_days'])\n",
+       "    \n",
+       "    meetings_df = pd.DataFrame([\n",
+       "        {\n",
+       "            'Start': m.start,\n",
+       "            'End': m.end,\n",
+       "            'Type': m.required_skill,\n",
+       "            'Is Night': m.is_night,\n",
+       "            'Duration (hours)': (m.end - m.start).total_seconds() / 3600\n",
+       "        } for m in meetings\n",
+       "    ])\n",
+       "    \n",
+       "    print(f\"Generated {len(meetings)} meetings\")\n",
+       "    display(meetings_df)\n",
+       "    \n",
+       "    return meetings_df\n",
+       "\n",
+       "interact_manual(generate_and_display_meetings)"
+      ]
+     },
+     {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+       "## Run the Scheduling Algorithm"
+      ]
+     },
+     {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+       "def run_algorithm():\n",
+       "    # Create agent objects\n",
+       "    global agents, final_schedule\n",
+       "    agents = [Agent(f\"Agent{i+1}\", AGENTS[f\"Agent{i+1}\"]) for i in range(PARAMS['num_agents'])]\n",
+       "\n",
+       "    # Run the scheduling algorithm\n",
+       "    final_schedule = run_scheduling_algorithm(agents, meetings, \n",
+       "                                              pop_size=PARAMS['population_size'], \n",
+       "                                              generations=PARAMS['num_generations'])\n",
+       "\n",
+       "    print(f\"Scheduled {len(final_schedule)} meetings\")\n",
+       "    \n",
+       "    # Create and display schedule dataframe\n",
+       "    schedule_df = create_schedule_dataframe(final_schedule)\n",
+       "    display(schedule_df)\n",
+       "    \n",
+       "    return schedule_df\n",
+       "\n",
+       "interact_manual(run_algorithm)"
+      ]
+     },
+     {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+       "## Visualize the Results"
+      ]
+     },
+     {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+       "def visualize_results(schedule_df):\n",
+       "    fig = plot_schedule(schedule_df)\n",
+       "    fig.show()\n",
+       "\n",
+       "    fig1, fig2, fig3, fig4 = plot_schedule_statistics(schedule_df)\n",
+       "    fig1.show()\n",
+       "    fig2.show()\n",
+       "    fig3.show()\n",
+       "    fig4.show()\n",
+       "\n",
+       "interact_manual(visualize_results)"
+      ]
+     },
+     {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+       "## Analyze the Schedule"
+      ]
+     },
+     {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+       "def analyze_results(schedule_df):\n",
+       "    analyze_schedule(schedule_df)\n",
+       "\n",
+       "interact_manual(analyze_results)"
+      ]
+     }
+    ],
+    "metadata": {
+     "kernelspec": {
+      "display_name": "Python 3",
+      "language": "python",
+      "name": "python3"
+     },
+     "language_info": {
+      "codemirror_mode": {
+       "name": "ipython",
+       "version": 3
+      },
+      "file_extension": ".py",
+      "mimetype": "text/x-python",
+      "name": "python",
+      "nbconvert_exporter": "python",
+      "pygments_lexer": "ipython3",
+      "version": "3.8.8"
+     }
+    },
+    "nbformat": 4,
+    "nbformat_minor": 4
+   }
