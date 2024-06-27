@@ -13,6 +13,7 @@ def initialize_population(pop_size: int, agents: List[Agent], meetings: List[Mee
         population.append(schedule)
     return population
 
+
 def fitness(schedule: Dict[Meeting, Agent], agents: List[Agent]) -> float:
     score = 0
     agent_schedules = {agent: {} for agent in agents}
