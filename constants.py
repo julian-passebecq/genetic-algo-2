@@ -1,3 +1,5 @@
+#constants.py
+
 AGENTS = {
     "Agent1": ["Fire", "Security"],
     "Agent2": ["Maintenance", "Security"],
