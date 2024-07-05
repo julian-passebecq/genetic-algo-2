@@ -1,63 +1,110 @@
-#visualization.py
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import plotly.graph_objs as go
 from plotly.subplots import make_subplots
-import datetime
 
-def plot_fitness_history(fitness_history):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(y=fitness_history, mode='lines', name='Best Fitness'))
-    fig.update_layout(title='Fitness History', xaxis_title='Generation', yaxis_title='Fitness Score')
+
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
+
+def plot_top_3_schedules(top_3_schedules, meetings):
+    fig = make_subplots(rows=3, cols=1, subplot_titles=['Best Schedule', '2nd Best Schedule', '3rd Best Schedule'])
+
+    for i, schedule in enumerate(top_3_schedules, start=1):
+        schedule_df = create_schedule_dataframe(schedule, meetings)
+        for agent in schedule_df['Agent'].unique():
+            agent_schedule = schedule_df[schedule_df['Agent'] == agent]
+            fig.add_trace(
+                go.Bar(x=[agent_schedule['Start'], agent_schedule['End']], 
+                       y=[agent] * len(agent_schedule), 
+                       orientation='h', 
+                       name=agent,
+                       text=agent_schedule['Type'],
+                       hoverinfo='text'),
+                row=i, col=1
+            )
+
+    fig.update_layout(height=1200, title_text="Top 3 Schedules")
     return fig
 
-def create_schedule_dataframe(schedule):
-    data = []
-    for meeting, agent in schedule.items():
-        duration = (meeting.end - meeting.start).total_seconds() / 3600
-        if meeting.end < meeting.start:  # Meeting crosses midnight
-            duration = (meeting.end + datetime.timedelta(days=1) - meeting.start).total_seconds() / 3600
-        data.append({
-            'Agent': agent.id,
-            'Start': meeting.start,
-            'End': meeting.end,
-            'Type': meeting.required_skill,
-            'Is Night': meeting.is_night,
-            'Duration': duration
-        })
-    return pd.DataFrame(data)
+# ... (rest of the visualization.py file)
+
+
+def create_schedule_dataframe(schedule, meetings):
+    df = pd.DataFrame([
+        {
+            'Agent': agent,
+            'Start': meetings[i]['start'],
+            'End': meetings[i]['end'],
+            'Type': meetings[i]['required_skill'],
+            'Is Night': meetings[i]['is_night'],
+            'Duration': (meetings[i]['end'] - meetings[i]['start']).total_seconds() / 3600
+        }
+        for i, agent in schedule.items()
+    ])
+    return df
 
 def plot_schedule(schedule_df):
-    fig = px.timeline(schedule_df, x_start="Start", x_end="End", y="Agent", color="Type",
-                      hover_data=["Is Night", "Duration"],
-                      title="Security Company Schedule")
-    fig.update_yaxes(categoryorder="category ascending")
-    
+    fig = go.Figure()
+
+    for agent in schedule_df['Agent'].unique():
+        agent_schedule = schedule_df[schedule_df['Agent'] == agent]
+        fig.add_trace(go.Bar(
+            x=[agent_schedule['Start'], agent_schedule['End']],
+            y=[agent] * len(agent_schedule),
+            orientation='h',
+            name=agent,
+            text=agent_schedule['Type'],
+            hoverinfo='text',
+            marker=dict(
+                color=agent_schedule['Is Night'].map({True: 'rgba(0,0,255,0.5)', False: 'rgba(0,255,0,0.5)'}),
+                line=dict(
+                    color=agent_schedule['Is Night'].map({True: 'blue', False: 'green'}),
+                    width=2
+                )
+            )
+        ))
+
     # Add vertical lines for day boundaries
     for day in pd.date_range(schedule_df['Start'].min(), schedule_df['End'].max()):
-        fig.add_vline(x=day.replace(hour=5, minute=0), line_dash="dash", line_color="gray")
-    
-    # Update x-axis to show date on bottom and time on top
-    fig.update_xaxes(
-        tickformat="%H:%M",
-        tickangle=0,
-        tickfont=dict(size=10),
-        showgrid=True,
-        gridcolor='lightgray'
-    )
-    fig.update_layout(
-        xaxis=dict(
-            rangeslider=dict(visible=False),
-            tickformat="%Y-%m-%d"
-        ),
-        xaxis2=dict(
-            overlaying="x",
-            side="top",
-            tickformat="%H:%M",
-            showgrid=False
+        fig.add_shape(
+            type="line",
+            x0=day,
+            x1=day,
+            y0=0,
+            y1=len(schedule_df['Agent'].unique()),
+            line=dict(color="Gray", width=1, dash="dot")
         )
+
+    # Add vertical lines for night shift boundaries
+    night_shifts = schedule_df[schedule_df['Is Night']]
+    for _, shift in night_shifts.iterrows():
+        fig.add_shape(
+            type="line",
+            x0=shift['Start'],
+            x1=shift['Start'],
+            y0=0,
+            y1=len(schedule_df['Agent'].unique()),
+            line=dict(color="Blue", width=2, dash="solid")
+        )
+        fig.add_shape(
+            type="line",
+            x0=shift['End'],
+            x1=shift['End'],
+            y0=0,
+            y1=len(schedule_df['Agent'].unique()),
+            line=dict(color="Blue", width=2, dash="solid")
+        )
+
+    fig.update_layout(
+        title="Security Company Schedule",
+        xaxis_title="Date",
+        yaxis_title="Agent",
+        barmode='overlay',
+        height=800,
+        width=1200,
+        showlegend=False
     )
-    
+
     return fig
 
 def plot_schedule_statistics(schedule_df):
